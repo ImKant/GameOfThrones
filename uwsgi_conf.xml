@@ -1,0 +1,9 @@
+ <uwsgi>
+     <pythonpath>/home/zhx/my_flask/</pythonpath> <!--工程的根目录 也可以理解为应用的父目录-->
+     <module>app</module><!--应用所在目录的名称-->
+     <callable>App</callable><!--应用中的具体调用实例，这里是App-->
+     <socket>/tmp/uwsgi.sock</socket><!--用来和nginx交互的缓存文件，也可以使用端口，例如127.0.0.1:9090-->
+     <master/>
+     <processes>1</processes> <!--应用运行的进程数-->
+     <memory-report/>
+</uwsgi>
