@@ -1,0 +1,1 @@
+select * from bi_dw.ssss where ds='${bizdate}'
