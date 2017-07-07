@@ -55,6 +55,8 @@ with tf.name_scope('dropout_layer'):
 with tf.name_scope('softmax_layer'):
     W_fc2 = weight_variable([1024, 10], name="W_fc2")
     b_fc2 = bias_variable([10], name="b_fc2")
+    # W_wide= weight_variable([28*28,10], name="")
+
     y_predict=tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)   #softmax层
 
 
@@ -90,6 +92,7 @@ with tf.Session() as sess:
             train_acc = accuracy.eval(feed_dict={x:batch[0], y_actual: batch[1], keep_prob: 1.0})
             print('step',i,'training accuracy',train_acc)
             # tf.runable_variable()
+
             c,summary_str = sess.run([train_step,merged_summary_op], feed_dict={x: batch[0], y_actual: batch[1], keep_prob: 0.5})
 
             summary_writer.add_summary(summary_str, i)

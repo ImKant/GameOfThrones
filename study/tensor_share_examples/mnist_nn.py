@@ -13,13 +13,13 @@ import tensorflow as tf
 
 # Import MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
-mnist = input_data.read_data_sets("../MNIST_data", one_hot=True)
+mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Parameters
-learning_rate = 0.03
+learning_rate = 0.01
 training_epochs = 25
 batch_size = 100
-display_step = 100
+display_step = 1
 logs_path = '/tmp/tensorflow_logs/example'
 
 # Network Parameters
@@ -39,16 +39,30 @@ y = tf.placeholder(tf.float32, [None, 10], name='LabelData')
 def multilayer_perceptron(x, weights, biases):
     # Hidden layer with RELU activation
     layer_1 = tf.add(tf.matmul(x, weights['w1']), biases['b1'])
-    out_layer = tf.nn.softmax(layer_1)
-    tf.histogram_summary("sigmoid", layer_1)
+    layer_1 = tf.nn.relu(layer_1)
+    # Create a summary to visualize the first layer ReLU activation
+    #tf.summary.histogram("relu1", layer_1)
+    tf.histogram_summary("relu1", layer_1)
+    # Hidden layer with RELU activation
+    layer_2 = tf.add(tf.matmul(layer_1, weights['w2']), biases['b2'])
+    layer_2 = tf.nn.relu(layer_2)
+    # Create another summary to visualize the second layer ReLU activation
+    #tf.summary.histogram("relu2", layer_2)
+    tf.histogram_summary("relu2", layer_2)
+    # Output layer
+    out_layer = tf.add(tf.matmul(layer_2, weights['w3']), biases['b3'])
     return out_layer
 
 # Store layers weight & bias
 weights = {
-    'w1': tf.Variable(tf.random_normal([n_input, n_classes],stddev=0.3), name='W1')
+    'w1': tf.Variable(tf.random_normal([n_input, n_hidden_1]), name='W1'),
+    'w2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2]), name='W2'),
+    'w3': tf.Variable(tf.random_normal([n_hidden_2, n_classes]), name='W3')
 }
 biases = {
-    'b1': tf.Variable(tf.random_normal([n_classes],stddev=0.3), name='b1')
+    'b1': tf.Variable(tf.random_normal([n_hidden_1]), name='b1'),
+    'b2': tf.Variable(tf.random_normal([n_hidden_2]), name='b2'),
+    'b3': tf.Variable(tf.random_normal([n_classes]), name='b3')
 }
 
 # Encapsulating all ops into scopes, making Tensorboard's Graph
@@ -86,8 +100,8 @@ tf.scalar_summary("accuracy", acc)
 for var in tf.trainable_variables():
     tf.histogram_summary(var.name, var)
 # Summarize all gradients
-# for grad, var in grads:
-#     tf.histogram_summary(var.name + '/gradient', grad)
+for grad, var in grads:
+    tf.histogram_summary(var.name + '/gradient', grad)
 # Merge all summaries into a single op
 merged_summary_op = tf.merge_all_summaries()
 
@@ -100,20 +114,23 @@ with tf.Session() as sess:
                                             graph=tf.get_default_graph())
 
     # Training cycle
-    avg_cost = 0.
-    # Loop over all batches
-    for i in range(30000):
-        batch_xs, batch_ys = mnist.train.next_batch(batch_size)
-        # Run optimization op (backprop), cost op (to get loss value)
-        # and summary nodes
-        _, l, summary, accuracy = sess.run([apply_grads, loss, merged_summary_op, acc],
-                                 feed_dict={x: batch_xs, y: batch_ys})
-        # Write logs at every iteration
-        summary_writer.add_summary(summary,  i)
-        # Compute average loss
-        # Display logs per epoch step
-        if i % display_step == 0:
-            print("Epoch:", '%04d' % i, "loss={:.9f}".format(l), "acc={:.9f}".format(accuracy))
+    for epoch in range(training_epochs):
+        avg_cost = 0.
+        total_batch = int(mnist.train.num_examples/batch_size)
+        # Loop over all batches
+        for i in range(total_batch):
+            batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+            # Run optimization op (backprop), cost op (to get loss value)
+            # and summary nodes
+            _, c, summary = sess.run([apply_grads, loss, merged_summary_op],
+                                     feed_dict={x: batch_xs, y: batch_ys})
+            # Write logs at every iteration
+            summary_writer.add_summary(summary, epoch * total_batch + i)
+            # Compute average loss
+            avg_cost += c / total_batch
+            # Display logs per epoch step
+        if (epoch+1) % display_step == 0:
+            print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
 
     print("Optimization Finished!")
 
