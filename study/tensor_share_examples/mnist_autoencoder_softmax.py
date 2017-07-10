@@ -61,11 +61,11 @@ def auto_encoder(x, weights, biases):
                                        biases['decoder_b1']))
         layer_4 = tf.nn.sigmoid(tf.add(tf.matmul(layer_3, weights['decoder_h2']),
                                        biases['decoder_b2']))
-    return layer_4
+    return layer_4,layer_2
 
 with tf.name_scope("AE"):
     # 预测
-    y_encode = auto_encoder(X, weights, biases)
+    y_encode, y_layer_2 = auto_encoder(X, weights, biases)
     y_true = X
 
     # 定义代价函数和优化器
@@ -95,24 +95,26 @@ n_classes = 10 # MNIST total classes (0-9 digits)
 # tf Graph Input
 # mnist data image of shape 28*28=784
 x = tf.placeholder(tf.float32, [None, 784], name='InputData')
+x2 = tf.placeholder(tf.float32, [None, 128], name='InputData')
 
-x2 = tf.placeholder(tf.float32, [None, 784], name='InputData')
 # 0-9 digits recognition => 10 classes
 y = tf.placeholder(tf.float32, [None, 10], name='LabelData')
 
 
 # Create model
-def multilayer_perceptron(x,x2, weights, biases):
+def multilayer_perceptron(x, x2, weights, biases):
     # Hidden layer with RELU activation
-    layer_1 = tf.add(tf.matmul(x, weights['w1'])+tf.matmul(x2, weights['w2']), biases['b1'])
+    # layer_1 = tf.add(tf.matmul(x, weights['w1'])+tf.matmul(x2, weights['w2']), biases['b1'])
+    layer_1 = tf.add(tf.matmul(x2, weights['w2']), biases['b1'])
+    # layer_1 = tf.add(tf.matmul(x, weights['w1']), biases['b1'])
     out_layer = tf.nn.softmax(layer_1)
-    tf.histogram_summary("sigmoid", layer_1)
+    # tf.summary.histogram("softmax", out_layer)
     return out_layer
 
 # Store layers weight & bias
 weights = {
     'w1': tf.Variable(tf.random_normal([n_input, n_classes],stddev=0.3), name='W1'),
-    'w2': tf.Variable(tf.random_normal([n_input, n_classes],stddev=0.3), name='W2')
+    'w2': tf.Variable(tf.random_normal([128, n_classes],stddev=0.3), name='W2')
 }
 biases = {
     'b1': tf.Variable(tf.random_normal([n_classes],stddev=0.3), name='b1')
@@ -122,20 +124,20 @@ biases = {
 # Visualization more convenient
 with tf.name_scope('Model'):
     # Build model
-    pred = multilayer_perceptron(x,x2, weights, biases)
+    pred = multilayer_perceptron(x, x2, weights, biases)
 
 with tf.name_scope('Loss'):
     # Softmax Cross entropy (cost function)
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
-
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels= y,logits = pred))
 with tf.name_scope('SGD'):
     # Gradient Descent
     optimizer = tf.train.GradientDescentOptimizer(learning_rate)
     # Op to calculate every variable gradient
-    grads = tf.gradients(loss, tf.trainable_variables())
-    grads = list(zip(grads, tf.trainable_variables()))
+    # grads = tf.gradients(loss, tf.trainable_variables())
+    # grads = list(zip(grads, tf.trainable_variables()))
     # Op to update all variables according to their gradient
-    apply_grads = optimizer.apply_gradients(grads_and_vars=grads)
+    apply_grads = optimizer.minimize(loss=loss)
+    # apply_grads = optimizer.apply_gradients(grads_and_vars=grads)
 
 with tf.name_scope('Accuracy'):
     # Accuracy
@@ -150,24 +152,24 @@ else:
     init = tf.global_variables_initializer()
 
 # Create a summary to monitor cost tensor
-tf.scalar_summary("loss", loss)
+tf.summary.scalar("loss", loss)
 # Create a summary to monitor accuracy tensor
-tf.scalar_summary("accuracy", acc)
+tf.summary.scalar("accuracy", acc)
 # Create summaries to visualize weights
-for var in tf.trainable_variables():
-    tf.histogram_summary(var.name, var)
+# for var in tf.trainable_variables():
+    # tf.summary.histogram(var.name, var)
 # Summarize all gradients
 # for grad, var in grads:
-#     tf.histogram_summary(var.name + '/gradient', grad)
+#     tf.summary.histogram(var.name + '/gradient', grad)
 # Merge all summaries into a single op
-merged_summary_op = tf.merge_all_summaries()
+merged_summary_op = tf.summary.merge_all()
 
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
 
     # op to write logs to Tensorboard
-    summary_writer = tf.train.SummaryWriter(logs_path,
+    summary_writer = tf.summary.FileWriter(logs_path,
                                             graph=tf.get_default_graph())
 
 
@@ -191,13 +193,13 @@ with tf.Session() as sess:
     # Training cycle
     avg_cost = 0.
     # Loop over all batches
-    for i in range(10000):
+    for i in range(50000):
         batch_xs, batch_ys = mnist.train.next_batch(batch_size)
-        batch_xs_encode = sess.run(y_encode, feed_dict={X:batch_xs})
+        batch_xs_encode, batch_xs_encode_layer2 = sess.run([y_encode,y_layer_2], feed_dict={X:batch_xs})
         # Run optimization op (backprop), cost op (to get loss value)
         # and summary nodes
         _, l, summary, accuracy = sess.run([apply_grads, loss, merged_summary_op, acc],
-                                           feed_dict={x: batch_xs_encode, x2:batch_xs, y: batch_ys})
+                                           feed_dict={x: batch_xs, x2:batch_xs_encode_layer2, y: batch_ys})
         # Write logs at every iteration
         summary_writer.add_summary(summary,  i)
         # Compute average loss
@@ -209,8 +211,8 @@ with tf.Session() as sess:
 
     # Test model
     # Calculate accuracy
-    batch_xs_encode = sess.run(y_encode, feed_dict={X:mnist.test.images})
-    print("Accuracy:", acc.eval({x: batch_xs_encode, y: mnist.test.labels}))
+    batch_xs_encode, batch_xs_encode_layer2 = sess.run([y_encode,y_layer_2], feed_dict={X:mnist.test.images})
+    print("Accuracy:", acc.eval({x: mnist.test.images, x2:batch_xs_encode_layer2, y: mnist.test.labels}))
 
     print("Run the command line:\n" \
           "--> tensorboard --logdir=/tmp/tensorflow_logs " \

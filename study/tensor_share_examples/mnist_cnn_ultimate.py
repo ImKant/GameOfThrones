@@ -127,19 +127,19 @@ with tf.name_scope('CNN'):
     with tf.name_scope('accuracy'):
         correct_prediction = tf.equal(tf.argmax(y_predict,1), tf.argmax(y_actual,1))
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))                 #精确度计算
-        # tf.scalar_summary("acc", accuracy)
+        # tf.summary.scalar("acc", accuracy)
 saver = tf.train.Saver()
 
-for var in tf.trainable_variables():
-    tf.histogram_summary(var.name, var)
+# for var in tf.trainable_variables():
+#     tf.summary.histogram(var.name, var)
 
-tf.scalar_summary("loss", cross_entropy)
+tf.summary.scalar("loss", cross_entropy)
 
 
-merged_summary_op = tf.merge_all_summaries()
+merged_summary_op = tf.summary.merge_all()
 
 with tf.Session() as sess:
-    summary_writer = tf.train.SummaryWriter('/tmp/mnist_cnn_ultimate_logs', graph=tf.get_default_graph())
+    summary_writer = tf.summary.FileWriter('/tmp/mnist_cnn_ultimate_logs', graph=tf.get_default_graph())
 
     sess.run(tf.initialize_all_variables())
 
@@ -165,7 +165,13 @@ with tf.Session() as sess:
 
             summary_writer.add_summary(summary_str, i)
 
-    test_acc=accuracy.eval(feed_dict={x: mnist.test.images, y_actual: mnist.test.labels, keep_prob: 1.0})
+    x_encode = sess.run(y_pred, feed_dict={x: mnist.test.images[0:1000]})
+
+    test_acc=accuracy.eval(feed_dict={x: x_encode, y_actual: mnist.test.labels[0:1000], keep_prob: 1.0})
+    print("test accuracy encoded",test_acc)
+
+    test_acc=accuracy.eval(feed_dict={x:  mnist.test.images[0:1000], y_actual: mnist.test.labels[0:1000], keep_prob: 1.0})
     print("test accuracy",test_acc)
+
     save_path = saver.save(sess, "tmp/model.ckpt")
     print "Model saved in file: ", save_path

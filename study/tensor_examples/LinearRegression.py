@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # 例1，生成三维数据，然后用一个平面拟合它：
 # (tensorflow)$ python   用 Python API 写 TensorFlow 示例代码
 

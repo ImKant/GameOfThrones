@@ -5,6 +5,7 @@ import numpy as np
 data1 = ts.get_h_data('002230')
 print data1.head(100)
 ''''
+复权历史数据
 ktype
 默认为D日线数据
 D=日k线 W=周 M=月
