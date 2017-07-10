@@ -1,4 +1,4 @@
-
+# -*- coding: utf-8 -*-
 '''''
 Graph and Loss visualization using Tensorboard.
 This example is using the MNIST database of handwritten digits
@@ -16,8 +16,9 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Parameters
-learning_rate = 0.01
-training_epochs = 25
+learning_rate = 0.02
+dropout_rate = 0.6
+training_epochs = 100
 batch_size = 100
 display_step = 1
 logs_path = '/tmp/tensorflow_logs/example'
@@ -36,44 +37,38 @@ y = tf.placeholder(tf.float32, [None, 10], name='LabelData')
 
 
 # Create model
-def multilayer_perceptron(x, weights, biases):
-    # Hidden layer with RELU activation
-    layer_1 = tf.add(tf.matmul(x, weights['w1']), biases['b1'])
-    layer_1 = tf.nn.relu(layer_1)
-    # Create a summary to visualize the first layer ReLU activation
-    #tf.summary.histogram("relu1", layer_1)
-    tf.histogram_summary("relu1", layer_1)
-    # Hidden layer with RELU activation
-    layer_2 = tf.add(tf.matmul(layer_1, weights['w2']), biases['b2'])
-    layer_2 = tf.nn.relu(layer_2)
-    # Create another summary to visualize the second layer ReLU activation
-    #tf.summary.histogram("relu2", layer_2)
-    tf.histogram_summary("relu2", layer_2)
+# 第0层未输入层
+# 最后一层是全链接softmax输出层
+def dnn_struct(x, depth, layers_size, dropout_rate):
+    weights = {}
+    biases = {}
+    layers = {}
+    layers[0] = x
+    for d in range(1, depth-1):
+        weights[d] = tf.Variable(tf.random_normal([layers_size[d-1], layers_size[d]], stddev=0.3), name='W'+str(d));
+        biases [d] = tf.Variable(tf.random_normal([layers_size[d]], stddev=0.3), name='B'+str(d));
+        layers[d]  = tf.add(tf.matmul(layers[d-1], weights[d]), biases[d])
+        layers[d]  = tf.nn.dropout(layers[d], dropout_rate)
+        layers[d]  = tf.nn.relu(layers[d])
+        tf.summary.histogram("relu"+str(d), layers[d])
+
     # Output layer
-    out_layer = tf.add(tf.matmul(layer_2, weights['w3']), biases['b3'])
+    d = depth - 1
+    weights[d] = tf.Variable(tf.random_normal([layers_size[d-1], layers_size[d]]), name='W'+str(d));
+    biases [d] = tf.Variable(tf.random_normal([layers_size[d]]), name='B'+str(d));
+    out_layer =  tf.nn.softmax( tf.add(tf.matmul(layers[d-1], weights[d]), biases[d]))
     return out_layer
 
-# Store layers weight & bias
-weights = {
-    'w1': tf.Variable(tf.random_normal([n_input, n_hidden_1]), name='W1'),
-    'w2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2]), name='W2'),
-    'w3': tf.Variable(tf.random_normal([n_hidden_2, n_classes]), name='W3')
-}
-biases = {
-    'b1': tf.Variable(tf.random_normal([n_hidden_1]), name='b1'),
-    'b2': tf.Variable(tf.random_normal([n_hidden_2]), name='b2'),
-    'b3': tf.Variable(tf.random_normal([n_classes]), name='b3')
-}
 
 # Encapsulating all ops into scopes, making Tensorboard's Graph
 # Visualization more convenient
 with tf.name_scope('Model'):
     # Build model
-    pred = multilayer_perceptron(x, weights, biases)
+    pred = dnn_struct(x, 6, [784,128,128,128,128,10], dropout_rate)
 
 with tf.name_scope('Loss'):
     # Softmax Cross entropy (cost function)
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
 
 with tf.name_scope('SGD'):
     # Gradient Descent
@@ -90,47 +85,51 @@ with tf.name_scope('Accuracy'):
     acc = tf.reduce_mean(tf.cast(acc, tf.float32))
 
 # Initializing the variables
-init = tf.initialize_all_variables()
-
+init = tf.global_variables_initializer()
 # Create a summary to monitor cost tensor
-tf.scalar_summary("loss", loss)
+tf.summary.scalar("loss", loss)
 # Create a summary to monitor accuracy tensor
-tf.scalar_summary("accuracy", acc)
+tf.summary.scalar("accuracy", acc)
 # Create summaries to visualize weights
 for var in tf.trainable_variables():
-    tf.histogram_summary(var.name, var)
+    tf.summary.histogram(var.name, var)
 # Summarize all gradients
 for grad, var in grads:
-    tf.histogram_summary(var.name + '/gradient', grad)
+    tf.summary.histogram(var.name + '/gradient', grad)
 # Merge all summaries into a single op
-merged_summary_op = tf.merge_all_summaries()
+merged_summary_op = tf.summary.merge_all()
 
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
 
     # op to write logs to Tensorboard
-    summary_writer = tf.train.SummaryWriter(logs_path,
+    summary_writer = tf.summary.FileWriter(logs_path,
                                             graph=tf.get_default_graph())
+
+    total_batch = int(mnist.train.num_examples/batch_size)
+    print("total_batch", total_batch)
 
     # Training cycle
     for epoch in range(training_epochs):
         avg_cost = 0.
-        total_batch = int(mnist.train.num_examples/batch_size)
+        current_accuracy = 0.
+
         # Loop over all batches
         for i in range(total_batch):
             batch_xs, batch_ys = mnist.train.next_batch(batch_size)
             # Run optimization op (backprop), cost op (to get loss value)
             # and summary nodes
-            _, c, summary = sess.run([apply_grads, loss, merged_summary_op],
+            _, c, a, summary = sess.run([apply_grads, loss, acc,  merged_summary_op],
                                      feed_dict={x: batch_xs, y: batch_ys})
             # Write logs at every iteration
             summary_writer.add_summary(summary, epoch * total_batch + i)
             # Compute average loss
             avg_cost += c / total_batch
+            current_accuracy += a / total_batch
             # Display logs per epoch step
-        if (epoch+1) % display_step == 0:
-            print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
+        # if (epoch+1) % display_step == 0:
+        print("Epoch:", '%04d' % (epoch+1), "cost =", "{:.9f}".format(avg_cost), "accuracy =", "{:.9f}".format(current_accuracy))
 
     print("Optimization Finished!")
 
